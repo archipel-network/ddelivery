@@ -1,4 +1,5 @@
 mod smtp_server;
+mod smtp;
 use simple_logger::SimpleLogger;
 use smtp_server::{run_smtp_server, SmtpConfig};
 
