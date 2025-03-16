@@ -8,3 +8,4 @@ log = "0.4.26"
 simple_logger = "5.0.0"
 thiserror = "2.0.12"
 zmq = "0.10.0"
+ud3tn-aap = { git = "https://github.com/archipel-network/rust-ud3tn.git" }

@@ -29,7 +29,13 @@ pub fn run_smtp_server(config: SmtpConfig, _zmq: zmq::Context) {
         };
 
         for mail in mail_iter {
-            debug!("Received email : {:?}", mail);
+            match mail {
+                Ok(mail) => {
+                    debug!("Received email from {:?} to {:?}", mail.from, mail.receipients);
+                    debug!("\n{}", String::from_utf8_lossy(&mail.content))
+                },
+                Err(e) => error!("Failed to receive mail : {e}")
+            }
         }
 
         debug!("Connection ended")

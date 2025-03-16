@@ -1,4 +1,4 @@
-use std::{io::{self, Read, Write}, net::TcpStream, string::FromUtf8Error};
+use std::{io::{self, Read, Write}, net::TcpStream, ops::{Deref, Index}, string::FromUtf8Error};
 
 use log::error;
 use thiserror::Error;
@@ -137,8 +137,8 @@ pub enum SmtpError {
 #[derive(Debug)]
 pub enum ClientCommand {
     Hello(String),
-    Mail(String),
-    Recipient(String),
+    Mail(EmailAddress),
+    Recipient(EmailAddress),
     Data,
     MailInput(Vec<u8>),
     Quit,
@@ -194,15 +194,11 @@ impl ClientCommand {
                     return Err(ClientCommandParseError::SyntaxInvalid);
                 }
 
-                match String::from_utf8(params[5..].to_vec()) {
+                match EmailAddress::from_bytes(params[5..].to_vec()) {
                     Ok(from) => {
-                        if from.contains(" ") {
-                            return Err(ClientCommandParseError::SyntaxInvalid);
-                        }
-
                         Ok(ClientCommand::Mail(from))
                     },
-                    Err(e) => Err(ClientCommandParseError::InvalidCharacter(e))
+                    Err(e) => Err(ClientCommandParseError::InvalidFrom(e))
                 }
             }
 
@@ -217,9 +213,9 @@ impl ClientCommand {
                     return Err(ClientCommandParseError::SyntaxInvalid);
                 };
 
-                match String::from_utf8(recipient[3..].to_vec()) {
+                match EmailAddress::from_bytes(recipient[3..].to_vec()) {
                     Ok(recipient) => Ok(ClientCommand::Recipient(recipient)),
-                    Err(e) => Err(ClientCommandParseError::InvalidCharacter(e))
+                    Err(e) => Err(ClientCommandParseError::InvalidRecipient(e))
                 }
             }
 
@@ -303,7 +299,11 @@ pub enum ClientCommandParseError {
     #[error("Invalid command {0}")]
     InvalidCommand(String),
     #[error("Required parameter is missing")]
-    MissingParameter
+    MissingParameter,
+    #[error("Invalid recipient")]
+    InvalidRecipient(BadAddressError),
+    #[error("Invalid from")]
+    InvalidFrom(BadAddressError)
 }
 
 #[derive(Debug)]
@@ -322,9 +322,7 @@ pub enum ServerCommand {
     ClosingConnection,
     SyntaxError,
     CommandUnrecognized,
-    LocalError(String),
     CommandNotImplemented,
-    ParameterNotImplemented,
     BadSequenceOfCommand(String)
 }
 
@@ -370,12 +368,6 @@ impl ServerCommand {
 
             ServerCommand::CommandNotImplemented => 
                 format!("502 Not implemented\r\n").into_bytes(),
-
-            ServerCommand::ParameterNotImplemented => 
-                format!("504 Not implemented\r\n").into_bytes(),
-
-            ServerCommand::LocalError(text) => 
-                format!("451 {text}\r\n").into_bytes(),
 
             ServerCommand::CommandUnrecognized => 
                 format!("500 Command unrecognized\r\n").into_bytes(),
@@ -527,6 +519,8 @@ impl Iterator for MailReceiver {
                         ClientCommandParseError::InvalidCommandCharacter |
                         ClientCommandParseError::SyntaxInvalid |
                         ClientCommandParseError::MissingDomain |
+                        ClientCommandParseError::InvalidRecipient(_) |
+                        ClientCommandParseError::InvalidFrom(_) |
                         ClientCommandParseError::MissingParameter => {
                             if let Err(e) = self.session.send_command(ServerCommand::SyntaxError) {
                                 return Some(Err(e))
@@ -552,14 +546,55 @@ impl Iterator for MailReceiver {
 }
 
 #[derive(Debug)]
+pub struct EmailAddress(String);
+
+impl Deref for EmailAddress {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum BadAddressError {
+    #[error("Recipient address must start with < and finish with >")]
+    BadFrame,
+    #[error("Missing @ in email address")]
+    AtMissing,
+    #[error("Invalid UTF-8 string")]
+    InvalidUtf8String(#[from] FromUtf8Error)
+}
+
+impl EmailAddress {
+    pub fn from_bytes(source: Vec<u8>) -> Result<Self, BadAddressError> {
+        if ! ( source.starts_with(b"<") && source.ends_with(b">") ) {
+            return Err(BadAddressError::BadFrame)
+        }
+
+        if ! ( source.contains(&b'@') ) {
+            return Err(BadAddressError::AtMissing)
+        }
+
+        return Ok(Self(String::from_utf8(source)?))
+    }
+
+    pub fn domain(&self) -> &str {
+        let base = &self.0[1..self.0.len()-1];
+        let at_pos = base.find("@").unwrap();
+        &base[at_pos..base.len()]
+    }
+}
+
+#[derive(Debug)]
 pub struct Mail {
-    from: String,
-    receipients: Vec<String>,
-    content: Vec<u8>
+    pub from: EmailAddress,
+    pub receipients: Vec<EmailAddress>,
+    pub content: Vec<u8>
 }
 
 impl Mail {
-    pub fn new(from_address: String) -> Self {
+    pub fn new(from_address: EmailAddress) -> Self {
         Self { from: from_address, receipients: Vec::new(), content: Vec::new() }
     }
 }
