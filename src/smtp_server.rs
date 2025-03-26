@@ -1,14 +1,14 @@
-use std::net::TcpListener;
+use std::{net::TcpListener, sync::mpsc::Sender};
 
 use log::{debug, error, info};
 
-use crate::smtp::Session;
+use crate::{mail_sender::SenderMsg, smtp::Session};
 
 pub struct SmtpConfig {
     pub bind: String
 }
 
-pub fn run_smtp_server(config: SmtpConfig, _zmq: zmq::Context) {
+pub fn run_smtp_server(config: SmtpConfig, mail_sender_channel: Sender<SenderMsg>) {
     debug!("Starting SMTP server task");
 
     let listener = TcpListener::bind(config.bind.clone())
@@ -32,7 +32,9 @@ pub fn run_smtp_server(config: SmtpConfig, _zmq: zmq::Context) {
             match mail {
                 Ok(mail) => {
                     debug!("Received email from {:?} to {:?}", mail.from, mail.receipients);
-                    debug!("\n{}", String::from_utf8_lossy(&mail.content))
+                    if let Err(e) = mail_sender_channel.send(SenderMsg::SendMail(mail)){
+                        error!("Failed to send mail to sender task: {e}")
+                    }
                 },
                 Err(e) => error!("Failed to receive mail : {e}")
             }

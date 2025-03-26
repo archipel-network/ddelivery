@@ -1,4 +1,4 @@
-use std::{io::{self, Read, Write}, net::TcpStream, ops::{Deref, Index}, string::FromUtf8Error};
+use std::{io::{self, Read, Write}, net::TcpStream, ops::Deref, string::FromUtf8Error};
 
 use log::error;
 use thiserror::Error;
@@ -134,6 +134,7 @@ pub enum SmtpError {
     Command(#[from] ClientCommandParseError),
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum ClientCommand {
     Hello(String),
@@ -580,9 +581,8 @@ impl EmailAddress {
     }
 
     pub fn domain(&self) -> &str {
-        let base = &self.0[1..self.0.len()-1];
-        let at_pos = base.find("@").unwrap();
-        &base[at_pos..base.len()]
+        let result = &self.0.split_once("@").unwrap().1;
+        &result[..result.len()-1]
     }
 }
 
