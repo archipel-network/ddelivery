@@ -29,6 +29,7 @@ pub fn run_smtp_server(config: SmtpConfig, mail_sender_channel: Sender<SenderMsg
         };
 
         for mail in mail_iter {
+            //TODO Make mail sending fail if bundle submission failed
             match mail {
                 Ok(mail) => {
                     debug!("Received email from {:?} to {:?}", mail.from, mail.receipients);
