@@ -7,5 +7,15 @@ edition = "2021"
 log = "0.4.26"
 simple_logger = "5.0.0"
 thiserror = "2.0.12"
-zmq = "0.10.0"
 ud3tn-aap = { git = "https://github.com/archipel-network/rust-ud3tn.git" }
+mail-send = { version = "0.5.0", features = ["parser"] }
+tokio = { version = "1", features = ["full"] }
+mail-parser = "0.10.2"
+
+[[bin]]
+name = "ddelivery-sender"
+path = "src/main_sender.rs"
+
+[[bin]]
+name = "ddelivery-receiver"
+path = "src/main_receiver.rs"
