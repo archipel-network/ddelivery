@@ -1,6 +1,6 @@
 use std::sync::mpsc::Receiver;
 
-use log::{debug, error};
+use log::debug;
 
 use crate::{defaults::INBOX_AGENT_ID, smtp::Mail};
 
@@ -20,16 +20,10 @@ pub fn run_sender_task(receiver: Receiver<SenderMsg>, mut outbox_agent: ud3tn_aa
                     let detination = format!("dtn://{}/{}", recipient.domain(), INBOX_AGENT_ID);
                     debug!("Sending mail to {detination}");
 
-                    let send_result = outbox_agent.send_bundle(
+                    outbox_agent.send_bundle(
                         detination,
                         &mail.content
-                    );
-
-                    if let Err(e) = send_result {
-                        error!("Failed to send mail to node: {e}")
-                    } else {
-                        debug!("Mail sent")
-                    }
+                    ).expect("Failed to send mail to node");
                 }
             },
         }
