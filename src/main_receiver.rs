@@ -131,6 +131,8 @@ async fn lmtp_sender_task<T: AsyncRead+AsyncWrite+Unpin>(mut sender: SmtpClient<
             Ok(_) => debug!("Successfully transmitted message"),
             Err(e) => error!("Failed to transmit message: {e}")
         }
+
+        //BUG Try to reconnect in cas of failed transmission or inactivity
     }
 
 }
