@@ -1,4 +1,4 @@
-use std::{io::{self, Read, Write}, net::TcpStream, ops::Deref, string::FromUtf8Error};
+use std::{io::{self, Read, Write}, iter::once, net::TcpStream, ops::Deref, string::FromUtf8Error};
 
 use log::error;
 use thiserror::Error;
@@ -195,11 +195,17 @@ impl ClientCommand {
                     return Err(ClientCommandParseError::SyntaxInvalid);
                 }
 
-                match EmailAddress::from_bytes(params[5..].to_vec()) {
-                    Ok(from) => {
-                        Ok(ClientCommand::Mail(from))
-                    },
-                    Err(e) => Err(ClientCommandParseError::InvalidFrom(e))
+                match EmailAddress::from_bytes(
+                    params[5..].into_iter()
+                        .copied()
+                        .take_while(|it| *it != b'>')
+                        .chain(once(b'>'))
+                        .collect::<Vec<_>>()
+                    ) {
+                        Ok(from) => {
+                            Ok(ClientCommand::Mail(from))
+                        },
+                        Err(e) => Err(ClientCommandParseError::InvalidFrom(e))
                 }
             }
 
@@ -312,7 +318,8 @@ pub enum ServerCommand {
     OpeningMessage(String),
     HelloOk {
         domain: String,
-        greet: Option<String>
+        greet: Option<String>,
+        extensions: Vec<String>
     },
     SenderOk,
     RecipientOk,
@@ -334,19 +341,27 @@ impl ServerCommand {
             ServerCommand::OpeningMessage(domain) => 
                 format!("220 {domain} Service ready\r\n").into_bytes(),
 
-            ServerCommand::HelloOk { domain, greet } => {
-                    let mut strresult = vec![
-                        "250",
-                        domain.as_str()
+            ServerCommand::HelloOk { domain, greet, mut extensions } => {
+                    let mut lines = vec![
+                        domain
                     ];
 
                     if let Some(greet) = greet.as_ref() {
-                        strresult.push(greet);
+                        lines[0] += &format!(" {greet}");
                     }
 
-                    strresult.push("\r\n");
+                    lines.append(&mut extensions);
 
-                    strresult.join(" ").into_bytes()
+                    let size = lines.len();
+                    format!("{}\r\n", lines.iter()
+                            .enumerate()
+                            .map(|(i, it)| if i < size-1 {
+                                    format!("250-{it}")
+                                } else {
+                                    format!("250 {it}")
+                                }).collect::<Vec<_>>()
+                            .join("\r\n")
+                        ).into_bytes()
                 },
 
             ServerCommand::SenderOk => 
@@ -414,7 +429,10 @@ impl Iterator for MailReceiver {
 
                         ClientCommand::Hello(domain) => if let Err(e) = self.session.send_command(ServerCommand::HelloOk { 
                                 domain,
-                                greet: Some("delayed greetings !".to_owned())
+                                greet: Some("delayed greetings !".to_owned()),
+                                extensions: vec![
+                                    "8BITMIME".to_owned()
+                                ]
                             }) {
                                 return Some(Err(e))
                         },

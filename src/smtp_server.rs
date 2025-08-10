@@ -9,6 +9,7 @@ pub struct SmtpConfig {
 }
 
 pub fn run_smtp_server(config: SmtpConfig, mail_sender_channel: Sender<SenderMsg>) {
+
     debug!("Starting SMTP server task");
 
     let listener = TcpListener::bind(config.bind.clone())
